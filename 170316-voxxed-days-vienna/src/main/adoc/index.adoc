@@ -1,0 +1,692 @@
+= Java EE Microservices with
+:revealjs_controls: false
+:revealjs_history: true
+:hash: #
+:example-caption!:
+ifndef::imagesdir[:imagesdir: images]
+ifndef::sourcedir[:sourcedir: ../../main/java]
+
+image::swarm_logo_200px.png[]
+
+Peter Palaga, Red Hat
+
+== About me
+
+[.text-left]
+Peter Palaga
+
+* Senior sustaining engineer for JBoss EAP at Red Hat
+* Occasional contributor to WildFly Swarm
+* Author of srcdeps https://github.com/srcdeps/srcdeps-maven
+
+[NOTE.speaker]
+--
+* EAP stands for Enterprise Application Platform
+* It is the Java EE Application Server with commercial suppord from Red Hat
+* Based on the community project called WildFly
+* ... and there is my twitter handle at the bottom
+--
+
+== Agenda
+
+* Java EE
+* Microservices architectures
+* WildFly Swarm
+** Uberjar, Fractions
+** Demo: "Swarmify" a traditional EE Application
+** Configuration
+* Advanced topics
+** Secure access (Keycloak), Service registration and discovery,
+   Load Balancing & Circuit Breaking, and API documentation (Swagger).
+
+[NOTE.speaker]
+--
+Next slide: To warm up, please raise your hand...
+--
+
+
+== Java EE
+
+Please raise your hand if you ever wrote or maintained
+
+[%step]
+* Java Servlet
+* EJB
+* JAX-RS Endpoint
+* Persistence with Hibernate
+
+[NOTE.speaker]
+--
+
+Next slide: So what is Java EE?
+--
+
+
+=== Java EE
+
+(application developer's perspective)
+
+* A set of API specifications
+** Servlet, EJB, JAX-RS, JPA, JTA, CDI, JMS, ...
+* Packaged together as an Application Server
+* Several implementations
+** WildFly/JBoss EAP, WebSphere, WebLogic, ...
+* History since 1999, latest EE 7 from 2013, MicroProfile
+
+[NOTE.speaker]
+--
+Different things to different people...
+
+* MicroProfile: a new effort to refine the enterprise Java specifications for use in microservices
+* includes: JAX-RS JSON-P CDI
+--
+
+
+== Microservices
+
+[.text-left]
+Based on recent inovations
+
+[.text-left]
+* CI/CD
+* Linux containers
+* DevOps culture
+
+[.text-left]
+Divide the functionality into reasonably small units, a.k.a. Microservices
+
+[.text-left]
+* Communication through REST or other language independent protocols
+* Isolation: Languages, Runtimes, Datastores, Release cycles, (DevOps) teams
+
+
+[NOTE.speaker]
+--
+New approaches to software architecture
+
+There is a few things in both technology and process methodology that made the shift possible:
+
+* Build and Deployment automation
+** Smaller changesets go faster to production
+* Immutable, minimalistic images practical from many PoV
+** Fast provisioning
+** Fast boot -> fast scale up and down
+** Less code -> less bugs and less security problems
+* DevOps one, preferably small team responsible for the whole lifecycle of an appliction
+** from coding, through, build, QA, deploy and run to monitoring
+
+--
+
+
+=== Why Java EE still matters?
+
+* Robust, mature
+* Well understood (performance, scalability)
+* Standards compliant
+* Integrations
+* Investments (workforce, code in production)
+
+[NOTE.speaker]
+--
+First, there is a lot of reasons
+--
+
+
+=== How can Java EE fit in?
+
+Java EE App Servers have to carry all APIs to get certified
+
+* Large in terms of disk space
+* (Some) slow to boot
+* (Some) require a lot of memory
+
+
+== ... but my app does not need all of the APIs!
+
+
+=== Welcome WildFly Swarm!
+
+
+=== What is WildFly Swarm?
+
+* Open source project sponsored by Red Hat
+* A decomposition on WildFly Java EE Application Server
+* Take only the APIs you need (Just enough AppServer)
+* Package into a single runnable JAR (Uberjar) together with your application
+
+[NOTE.speaker]
+--
+* Decomposition not that hard with WildFly b/c it already is well modularized.
+* The Java EE APIs map to subsystems
+--
+
+== WildFly Swarm core concepts
+
+=== Uberjar
+
+A self-contained JAR
+
+* Your application
+* The parts of WildFly necessary to run it
+* An internal Maven repository of dependencies
+* A piece of bootstrap code
+
+
+=== Hollow Uberjar
+
+* Like Uberjar but contains no application code.
++
+[source,shell]
+----
+java -jar myruntime-hollow-swarm.jar my-app.war
+----
++
+* Useful with layered Linux containers:
+** Layer `n`: Hollow Uberjar runtime
+** Layer `n+1`: the application
+* Reduces the provisioning overhead and boot time
+* This is how WildFly Swarm implements MicroProfile
+
+
+=== Fractions
+
+* Well-defined collections of capabilities
+* Expressed as Maven GAVs
+* Autodetected at build time or explicitly declared
+* Configurable, with reasonable defaults
+* May map to
+** WildFly subsystems (read: Java EE APIs)
+** Any external code (Jolokia, Netflix Ribbon, Swagger, ...)
+* List of Fractions https://reference.wildfly-swarm.io/v/2017.3.3/
+
+
+== How to swarmify a WAR (1/2)
+
+Let's have a traditional Java EE application
+
+https://github.com/javaee-samples/javaee7-simple-sample
+
+[source,xml]
+----
+<project>
+  ...
+  <name>javaee7-simple-sample</name>
+  <packaging>war</packaging>
+  ...
+  <dependencies>
+    <dependency>
+      <groupId>javax</groupId>
+      <artifactId>javaee-api</artifactId>
+      <version>7.0</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+  ...
+----
+
+
+=== How to swarmify a WAR (2/2)
+
+[source,xml]
+----
+<plugin>  <!-- Add the wildfly-swarm-plugin -->
+  <groupId>org.wildfly.swarm</groupId>
+  <artifactId>wildfly-swarm-plugin</artifactId>
+  <version>2017.3.3</version>
+  <executions>
+    <execution>
+      <goals>
+        <goal>package</goal>
+      </goals>
+    </execution>
+  </executions>
+</plugin>
+----
+
+[source,shell,subs="quotes,macros,attributes"]
+----
+mvn package                                [comment]#{hash} build#
+ls target                                  [comment]#{hash} check what has#
+... *javaee7-simple-sample-swarm.jar* ...    [comment]#{hash}   been built#
+java -jar javaee7-simple-sample-swarm.jar  [comment]#{hash} run the uberjar#
+----
+
+
+=== Where are the Fractions?
+
+Autodetected by `wildfly-swarm-plugin` *or* declared explicitly:
+
+[source,xml]
+----
+<dependency> <!-- under dependencyManagement -->
+  <groupId>org.wildfly.swarm</groupId>
+  <artifactId>bom-all</artifactId>
+  <version>2017.3.3</version>
+  <type>pom</type>
+  <scope>import</scope>
+</dependency>
+...
+<dependencies> <!-- Fraction GAVs -->
+  <dependency>
+    <groupId>org.wildfly.swarm</groupId>
+    <artifactId>jaxrs</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.wildfly.swarm</groupId>
+    <artifactId>cdi</artifactId>
+  </dependency>
+  ...
+----
+
+
+== Start from scratch
+
+http://wildfly-swarm.io/generator/
+
+image::wildlfy-swarm-generator.png[WildFly Swarm Generator]
+
+
+== WildFly vs. WildFly Swarm
+
+=== Disk size
+
+|===
+|WildFly |WildFly Swarm (Uberjar)
+
+|148 MB wildfly-master.zip
+
+177 MB unzipped
+
+|36 MB plain Servlet
+
+47 MB above + JAX-RS
+
+86 MB above + CDI
+
+100 MB above + JPA/Hibernate
+
+|===
+
+
+=== Provisioning
+
+|===
+| WildFly | WildFly Swarm
+
+|Copy and unzip WildFly
+
+Boot
+
+Configure (datasources, ...)
+
+Deploy the app
+
+|Copy the uberjar to the server
+
+Run the uberjar
+
+|===
+
+
+=== Missing parts
+
+[.text-left]
+WildFly Swarm:
+
+* Will not run with a security manager
+* No EAR deployments
+* No clustering
+** Session replication, domain management, distributed caches, message broker
+
+[.text-left]
+Areas open for contributions from the community
+
+[NOTE.speaker]
+--
+A different mindset behind µservices
+
+* µservices should be stateless -> no need for (domain) management
+* Instances up and down quickly
+
+But still:
+* Swarm nodes free to communicate with clusters managed
+  separatelly, such as distributed cache (Infinispan), Message Brokers, ...
+* All kinds of clustering technically possible, because there is
+  WF under the hood. Area open for community contributions :)
+--
+
+
+== Configuration
+
+=== Java API
+
+[source,java]
+----
+public static void main(String[] args) throws Exception {
+  new Swarm().fraction(
+    new DatasourcesFraction()
+      .jdbcDriver("h2", (d) -> {
+        d.driverClassName("org.h2.Driver");
+        d.xaDatasourceClass("org.h2.jdbcx.JdbcDataSource");
+        d.driverModuleName("com.h2database.h2");
+      })
+      .dataSource("ExampleDS", (ds) -> {
+        ds.driverName("h2");
+        ds.connectionUrl("jdbc:h2:mem:test;"
+          + "DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
+        ds.userName("sa"); ds.password("sa");
+      })
+  ).start().deploy();
+}
+----
+
+[NOTE.speaker]
+--
+* The fractions that map to WildFly subsystems can be configured this way.
+* The configuration model is an equivalent to the WildFly management model.
+--
+
+
+=== Stages
+
+[source,yaml]
+----
+logger:               # project-defaults.yml file
+  level: DEBUG
+swarm:
+  port:
+    offset: 10
+---
+project:              # To specify the "development" stage,
+  stage: development  # run with
+logger:               #   java -jar my-swarm.jar -S development
+  level: DEBUG
+swarm:
+  port:
+    offset: 50
+---
+project:
+  stage: production
+logger:
+  level: INFO
+...
+----
+
+[NOTE.speaker]
+--
+* To set defaults
+* allow environment dependent customization
+* Everything in `project-defaults.yml`
+  or `project-defaults.yml` plus separate `project-mystage.yml` files
+--
+
+
+=== `standalone.xml`
+
+* Useful when migrating from a traditional WildFly deployment
+* Either
++
+[source,shell]
+----
+java -jar my-swarm.jar -c my-standalone.xml
+----
++
+* Or package `standalone.xml` in your uberjar by placing it to `src/main/resources`
+* Ensure that you have all subsystem fractions that you configure
+
+[NOTE.speaker]
+--
+Autodetection is noto looking into your standalone.xml
+--
+
+=== Command line arguments and system properties
+
+* `-b 192.168.1.104` or `-Dswarm.bind.address=192.168.1.104` to bind to a specific network interface
+* `-Dswarm.port.offset=42` to shift ports - e.g. `8080 -> 8122`
+* `-Dswarm.context.path=/my-app` - note that the default is `/`
+
+\... and many others
+
+[.small]
+Full reference: https://wildfly-swarm.gitbooks.io/wildfly-swarm-users-guide/content/configuration_properties.html
+
+
+== Advanced topics
+
+=== Secure access with Keycloak
+
+[NOTE.speaker]
+--
+Next: Who knows Keycloak?
+--
+
+
+=== What is Keycloak
+
+* JBoss community project
+* Single sign-on (SSO) server and identity broker
+
+[NOTE.speaker]
+--
+SAML, OAuth, OpenID, various Social Logins, LDAP/Active Directory integration
+--
+
+
+=== How to secure with Keycloak
+
+++++
+
+<table>
+<tr>
+  <td colspan="2" style="border-bottom:none">
+<div class="listingblock"><div class="content"><pre class="CodeRay"><code class="xml language-xml"><span class="tag">&lt;dependency&gt;</span> <span class="comment">&lt;!-- the keycloak client fraction in pom.xml --&gt;</span>
+  <span class="tag">&lt;groupId&gt;</span>org.wildfly.swarm<span class="tag">&lt;/groupId&gt;</span>
+  <span class="tag">&lt;artifactId&gt;</span>keycloak<span class="tag">&lt;/artifactId&gt;</span>
+<span class="tag">&lt;/dependency&gt;</span></code></pre></div></div>
+  </td>
+</tr>
+<tr>
+  <td>
+<div class="listingblock"><div class="content"><pre class="CodeRay"><code class="yaml language-yaml"><span class="comment"># project-defaults.yml</span>
+<span class="key">swarm</span>:
+ <span class="key">deployment</span>:
+  <span class="key">example-keycloak.war</span>:
+   <span class="key">web</span>:
+    <span class="key">login-config</span>:
+     <span class="key">auth-method</span>: <span class="string"><span class="content">KEYCLOAK</span></span>
+    <span class="key">security-constraints</span>:
+     - <span class="string"><span class="content">url-pattern: /secured</span></span>
+       <span class="key">methods</span>: <span class="string"><span class="content">[GET]</span></span>
+       <span class="key">roles</span>: <span class="string"><span class="content">[admin]</span></span></code></pre></div></div>
+  </td>
+  <td>
+<div class="listingblock"><div class="content"><pre class="CodeRay"><code class="javascript language-javascript"><span class="comment">/* WEB-INF/keycloak.json */</span>
+{
+<span class="key"><span class="delimiter">"</span><span class="content">realm</span><span class="delimiter">"</span></span>: <span class="string"><span class="delimiter">"</span><span class="content">wildfly-swarm-keycloak-example</span><span class="delimiter">"</span></span>,
+<span class="key"><span class="delimiter">"</span><span class="content">bearer-only</span><span class="delimiter">"</span></span>: <span class="predefined-constant">true</span>,
+<span class="key"><span class="delimiter">"</span><span class="content">auth-server-url</span><span class="delimiter">"</span></span>: <span class="string"><span class="delimiter">"</span><span class="content">http://localhost:8180/auth</span><span class="delimiter">"</span></span>,
+<span class="key"><span class="delimiter">"</span><span class="content">ssl-required</span><span class="delimiter">"</span></span>: <span class="string"><span class="delimiter">"</span><span class="content">external</span><span class="delimiter">"</span></span>,
+<span class="key"><span class="delimiter">"</span><span class="content">resource</span><span class="delimiter">"</span></span>: <span class="string"><span class="delimiter">"</span><span class="content">wildfly-swarm-keycloak-example</span><span class="delimiter">"</span></span>
+}</code></pre></div></div>
+  </td>
+</tr>
+</table>
+++++
+
+[.small]
+https://github.com/wildfly-swarm/wildfly-swarm-examples/tree/master/security/keycloak
+
+
+== Service registration
+
+++++
+<img src="images/registry.png" alt="Service Registry" width="350" style="position:absolute;right:-5px;z-index:1000">
+++++
+
+[source,xml]
+----
+<!-- pom.xml -->
+<dependency>
+  <groupId>org.wildfly.swarm</groupId>
+  <artifactId>topology-consul</artifactId>
+</dependency>
+----
+
+[source,java]
+----
+/* Inside main() method */
+JAXRSArchive deployment = ...
+/* register */
+deployment.as(TopologyArchive.class)
+    .advertise("my-time-service");
+----
+
+[source,shell]
+----
+java -Dswarm.consul.url=http://127.0.0.1:8500 -jar *-swarm.jar
+----
+
+[.small]
+https://github.com/wildfly-swarm/wildfly-swarm-examples/tree/master/ribbon-consul
+
+
+=== Service discovery
+
+* Either directly through `ConsulClient.getAgentServices()`
+* Or via Netflix Ribbon integration
+
+
+== Netflix Ribbon
+
+A REST inter-process communication library
+
+* Client-side load-balancing to other services
+** Several implementations: round Robin, response time weighted, random, ...
+* Integration with Service Registries
+** Services referenced by name rather than host
+* Built-in failure resiliency via Hystrix
+
+
+=== Netflix Ribbon Fraction
+
+[source,xml]
+----
+<!-- pom.xml -->
+<dependency>
+  <groupId>org.wildfly.swarm</groupId>
+  <artifactId>ribbon</artifactId>
+</dependency>
+----
+
+
+=== Netflix Ribbon service client
+
+[source,java]
+----
+                                         //    discovery by
+@ResourceGroup( name="my-time-service" ) // <- service name
+public interface TimeService {           //    lookup done
+                                         //    by Consul fraction
+    @TemplateName("currentTime")
+    @Http(
+            method = Http.HttpMethod.GET,
+            uri = "/"
+    )
+    @Hystrix(
+            fallbackHandler = TimeFallbackHandler.class
+    )
+    RibbonRequest<ByteBuf> currentTime();
+
+                           // Ribbon can provide an implementation
+                           // of the TimeService
+    TimeService INSTANCE = Ribbon.from(TimeService.class);
+}
+----
+
+[.small]
+https://github.com/wildfly-swarm/wildfly-swarm-examples/tree/master/ribbon-consul
+
+[NOTE.speaker]
+--
+
+* Hystrix has to do with Fault tolerance and resilience
+* Implements the Circuit Breaker design patterns
+
+It allows:
+
+* Fail fast and rapidly recover
+* Prevent cascading failures through Fallback options
+* Latency tolerance logic
+* Fault tolerance logic
+--
+
+
+==  Swagger API Documentation
+
+[source,xml]
+----
+<!-- pom.xml -->
+<dependency>
+  <groupId>org.wildfly.swarm</groupId> <!-- typically      -->
+  <artifactId>swagger</artifactId>     <!-- in combination -->
+</dependency>                          <!-- with jaxrs     -->
+----
+
+[source,java]
+----
+/* Inside main() method */
+SwaggerArchive archive =
+    ShrinkWrap.create(SwaggerArchive.class, "swagger-app.war");
+/* Tell swagger where our resources are */
+archive.setResourcePackages("org.myorg.myresources");
+----
+
+[.small]
+https://github.com/wildfly-swarm/wildfly-swarm-examples/tree/master/jaxrs/swagger
+
+
+=== Get the API Documentation
+
+[source,shell]
+----
+curl http://localhost:8080/swagger.json
+----
+
+[source,json]
+----
+{   "swagger":"2.0",
+    "info":{"version":"1.0.0"},
+    "host":"localhost:8080",
+    "basePath":"/swagger",
+    "tags":[{"name":"time"}],
+    "schemes":["http"],
+    "paths": {
+        "/time/now": {
+            "get": {
+                "tags":["time"],
+                "summary":"Get the current time",
+                "description":"Returns the time as a string",
+                "operationId":"get",
+                "produces":["application/json"],
+                "parameters":[],
+                "responses": {
+...
+----
+
+
+== WildFly Swarm Recap
+
+* Just enough Application Server
+* Uberjar or Hollow uberjar
+* Fractions to require and configure capabilites
+* WildFly Swarm Plugins for Maven and Gradle
+
+
+== Keep in touch
+
+* Documentation http://wildfly-swarm.io/
+* Examples https://github.com/wildfly-swarm/wildfly-swarm-examples
+* Forum https://groups.google.com/forum/#!forum/wildfly-swarm
+* IRC channel https://webchat.freenode.net/[#wildfly-swarm] at freenode
+* Issues https://issues.jboss.org/projects/SWARM
+* Twitter https://twitter.com/wildflyswarm[@wildflyswarm]

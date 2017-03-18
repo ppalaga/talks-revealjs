@@ -1,3 +1,5 @@
 Talks by https://twitter.com/ppalaga[Peter Palaga], licensed under link:license.txt[Creative Commons Attribution 4.0]
 
 image::https://cdn.rawgit.com/ppalaga/talks-revealjs/master/by.svg[Licensed under Creative Commons Attribution 4.0]
+
+The Maven build that transforms AsciiDoc to reveal.js is based on link:https://github.com/asciidoctor/asciidoctor-gradle-examples/tree/master/asciidoc-to-revealjs-example[asciidoc-to-revealjs-example].

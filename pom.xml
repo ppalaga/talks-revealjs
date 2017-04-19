@@ -11,5 +11,6 @@
   </properties>
   <modules>
     <module>170316-voxxed-days-vienna</module>
+    <module>170405-red-hat-open-house-brno</module>
   </modules>
 </project>

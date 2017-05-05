@@ -1,0 +1,477 @@
+= image:srcdeps-logo-white-on-transparent-500x500.png[srcdeps logo,130,130] `srcdeps`
+
+:revealjs_controls: false
+:revealjs_history: true
+:hash: #
+:example-caption!:
+ifndef::imagesdir[:imagesdir: images]
+ifndef::sourcedir[:sourcedir: ../../main/java]
+
+Source dependencies with Maven and Gradle
+
+{nbsp}
+
+Peter Palaga
+
+== About me
+
+[.text-left]
+Peter Palaga
+
+* Senior sustaining engineer for JBoss EAP at Red Hat
+* Author of `srcdeps` https://github.com/srcdeps/srcdeps
+* Views in this presentation are my own
+
+
+[NOTE.speaker]
+--
+* EAP stands for Enterprise Application Platform
+* It is the Java EE Application Server with commercial suppord from Red Hat
+* Based on the community project called WildFly
+* ... and there is my twitter handle at the bottom
+--
+
+== Agenda
+
+* Source dependencies:
+** What is it
+** What is it good for
+* `srcdeps` implementation for Maven and Gradle
+* `srcdeps` demo
+
+[NOTE.speaker]
+--
+* This is a shorter version of this talk
+* CI/CD parts stripped out
+* Next slide: To warm up, please raise your hand...
+--
+
+== What are source dependencies?
+
+=== The "usual" dependencies
+
+* Software projects often depend on *artifacts* produced by other projects
+* Those artifacts
+** typically contain compiled code
+** usually available in repositories (Maven Central, jcenter, ...) on the internet
+* Build tools (Maven, Gradle, ...) responsible for finding and downloading the dependencies
+
+
+=== Source dependencies
+
+* The build of every git commit deterministic enough
++
+=> Source code of a dependency enough to use it in a dependent project
++
+* The build tool has to:
+** Check out the sources (e.g. from a git repo)
+** Build the artifacts required by the dependent project
+
+NB: Dependency artifacts do not need to be available in a repository
+
+
+== The idea is not new
+
+Some languages (or their build tools) have it already
+
+
+=== Ruby
+
+`Gemfile` of a Ruby project
+
+[source,ruby]
+----
+# A binary dependency pulled from rubygems.org
+gem 'rack', '2.0.1'
+
+# A source dependency built by Blunder
+# from a git commit
+gem 'rack',
+    :git => 'https://github.com/rack/rack.git',
+    :ref => '0bd839d'
+----
+
+
+=== Scala
+
+`build.sbt`
+
+[source,java]
+----
+// A binary dependency
+libraryDependencies +=
+    "com.typesafe.play" %% "play-slick" % "2.0.2"
+
+// A source dependency
+myProject
+  .dependsOn(
+    ProjectRef(
+      uri("git://github.com/freekh/play-slick.git#v1.2.3")
+      "play-slick"
+    )
+  )
+----
+
+[NOTE.speaker]
+--
+* Anybody knows any other language/build tool allowing this?
+--
+
+== What is this good for?
+
+=== Testing and Integration
+
+* Test each commit of the dependency inside the dependent project
+* Find issues early
+
+
+=== Multilayer Continuous Delivery
+
+Multiple components in multiple *separate source repositories*
+
+image::wf-component-dependencies.svg[]
+
+
+[NOTE.speaker]
+--
+* The components depend on each other, building a dependency hierarchy
+* Independent release cycles
+--
+
+
+=== Fixing third-party code (1/2)
+
+Dependency project dead or not releasing fast enough
+
+* Fork and use as a source dependency
+* No consent from the dependency project needed
+
+=== Fixing third-party code (2/2)
+
+Dependency project doing nasty things
+
+* Fork and accept only some of their changes (e.g. security fixes)
+* Throw away all that can harm your stability
+* Again, no consent from the dependency project needed
+
+
+== How is this different from Maven SNAPSHOTs?
+
+=== SNAPSHOTs built locally
+
+* What you build is what you get
+* Handy on a developer's machine
+* Hard to share:
+** CI machines
+** Teammates
+
+
+=== Remote SNAPSHOTs are evil
+
+[%step]
+* You never know what you get
+** local/remote SNAPSHOT?
+** latest today != latest tomorrow
++
+{nbsp}
++
+* The build of a component depending on another SNAPSHOT component is *not reproducible* over time
+* Remote SNAPSHOTs should be always off
+
+
+=== Source dependencies
+
+[%step]
+* As compared SNAPSHOTs:
+** Reproducible
+** Easy to share with teammates and CI
++
+{nbsp}
++
+* As compared to traditional releases:
+** Releases done just for the sake of testing and integration may be avoided
+** May eliminate the need for releases and the artifact repository infra altogether
+
+
+== `srcdeps`
+
+The source dependencies for Maven and Gradle
+
+
+=== How `srcdeps` work (1/3)
+
+Three basic ideas
+
+[%step]
+1. Coin a convention for version strings to express the commit ID to build the given dependency from
++
+[source,xml,subs=+quotes]
+----
+<dependency>
+  <groupId>org.my-group</groupId>
+  <artifactId>my-artifact</artifactId>
+  <version>1.2.3-SRC-revision-*deadbeef*</version>
+</dependency><!--             ⬑ a git commit ID  -->
+----
++
+2. Provide a configuration that maps dependency artifacts to source repository URLs
+
+
+=== How `srcdeps` work (2/3)
+
+[start=3]
+3. Mechanism to trigger the build of the dependency:
+** Maven: custom implementation of the Local Maven Repository
+** Gradle PoC: srcdeps plugin scans the dependencies in `project.afterEvaluate {}`
+
+
+=== How `srcdeps` work (3/3)
+
+[.text-left]
+When an artifact with `*-SRC-revision-{commitId}` version is found
+
+[%step]
+* Find a git URL for it
+* Checkout the source to `~/.m2/srcdeps` directory
+* Change the versions in the `pom.xml`/`build.gradle` files to whatever `*-SRC-revision-{commitId}` was requested
+* Build and install locally
+
+
+== Demo: `srcdeps` with Maven
+
+
+link:#_miscellaneous_code_srcdeps_code_features[Skip things shown in demo]
+
+
+=== Let's have a simple project
+
+[source,java]
+----
+public class Demo {
+  public String sayHello() {
+    return "Hello World!";
+  }
+}
+
+public class DemoTest {
+  @Test
+  public void sayHelloTest() {
+    Assert.assertEquals("Hello World!", new Demo().sayHello());
+  }
+}
+----
+
+=== We need a new assertion
+
+[source,java,subs=+normal]
+----
+public class Demo {
+  public String sayHello() {
+    return "Hello World!";
+  }
+}
+
+public class DemoTest {
+  @Test
+  public void sayHelloTest() {
+    Assert.[keyword]*assertJavaViennaHello*(new Demo().sayHello());
+    //      ⬑ not available in the stock jUnit :(
+  }
+}
+----
+
+
+=== Clone JUnit
+
+[source,java]
+----
+public class Assert {
+
+  // Add the new method to org.junit.Assert
+  public static void assertJavaViennaHello(String actual) {
+    assertEquals(
+      "Not the right conference!!!",
+      "Hello Java Vienna!", actual
+    );
+  }
+...
+----
+
+\... and commit and push to your fork
+
+
+=== Intialize `srcdeps` configuration in the depeendent project
+
+[source,shell]
+----
+mvn org.srcdeps.mvn:srcdeps-maven-plugin:3.0.1:init
+----
+
+That generates `.mvn/extensions.xml` and `.mvn/srcdeps.yaml` files for you
+
+
+=== `.mvn/extensions.xml`
+
+[source,xml]
+----
+<extensions>
+  <extension>
+    <groupId>org.l2x6.srcdeps</groupId>
+    <artifactId>srcdeps-maven-local-repository</artifactId>
+    <version>3.0.1</version>
+  </extension>
+</extensions>
+----
+
+* Maven Core Extensions since Maven 3.3.1
+* Allows for replacing substantial parts of Maven by our own custom implementations
+* Much more powerful than the plugin API
+** Parent, BoM imports are looked up earlier than any plugin code can be invoked
+
+
+=== `srcdeps.yaml`
+
+[source,yaml]
+----
+configModelVersion: 2.0
+repositories:
+  junit:
+    selectors:
+    - junit # a groupId[:artifactId[:version]] pattern
+            # may contain * wildcards
+    urls:
+    - git:https://github.com/ppalaga/junit4.git
+----
+
+* A mapping from artifacts to git URLs
+* Plus some other options
+
+
+=== Upgrade `junit` in the dependent project
+
+[source,xml,subs=+quotes]
+----
+...
+<dependency>
+  <groupId>junit</groupId>
+  <artifactId>junit</artifactId>
+  <scope>test</scope>
+  <version>4.13-SRC-revision-*fd0a1c029b99277c955417b0c*</version>
+</dependency>
+...
+----
+
+
+== Build the dependent project
+
+[source,shell]
+----
+cd srcdeps-demo
+mvn clean test
+...
+Failed tests:
+  sayHelloTest(org.srcdeps.DemoTest): Not the right conference!
+    expected:<Hello [Java Vienna]!> but was:<Hello [World]!>
+...
+----
+
+Fix `Demo.sayHello()` to return `"Hello Java Vienna!"`
+
+[source,shell]
+----
+cd srcdeps-demo
+mvn clean test
+...
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+...
+BUILD SUCCESS
+----
+
+Q.E.D.
+
+
+=== Interesting locations
+
+* The source dependency was built under `${local.maven.repo.dir}/../srcdeps/${groupId}`, typically `~/.m2/srcdeps/${groupId}`
+* The source dependency was installed in the local Maven repo, typically `~/.m2/repository
+
+
+== Gradle support
+
+* Proof of Concept stage
+
+
+
+
+== `srcdeps` features
+
+* Dependencies can refer to not only commits, but also branches and tags:
+** `1.2.3-SRC-revision-{myCommitId}`
+** `1.2.3-SRC-branch-{myBranchName}`
+** `1.2.3-SRC-revision-{myTagName}`
++
+{nbsp}
++
+* Source dependencies work for vitually any kind of a dependency incl. parent, managed imports and even plugins
+
+== `srcdeps.yaml` config. options
+
+* `verbosity` of dependency builds
+* Custom arguments for dependency builds, e.g. `-Dcheckstyle.skip`
+* `-DskipTests` by default
+* `buildTimeout`
+* By default `failWith: {goals: release:prepare}` to prevent releases with source dependencies
+* See https://github.com/srcdeps/srcdeps-core/blob/master/doc/srcdeps.yaml
+
+== Limitations
+
+Can you think of any?
+
+[options="step"]
+* Tools unaware of `srcdeps` (IDEs, static pom.xml analysers, ...) will see the `-SRC-` deps as non-available
+* Only Maven and git supported well ATM, Gradle on the way
+* However immutable git commits are, they can still disappear from repos, or even the whole repo can be deleted
+** Best practice: use `srcdeps` only against your own repos or your own mirrors of third party repos
+* There is still a few things that may differ among devs: java version, mvn version
+** Projects should use `mvnw` with a fixed mvn version
+** Enforcer plugin for Java version
+* The `-SRC-` artifacts (jars, wars, ...) built by you and me will typically not be binary equal
+** Typically will make no harm
+** Where would this matter actually?
+
+
+== History of `srcdeps`
+
+* Created around October 2015 during my time in Hawkular link:https://github.com/hawkular/[]
+** A greenfield project with several components
+** To speedup the integration of components
+** Positive feedback, still in use
+
+* Pull request to introduce `srcdeps` to WildFly Core open this week
+** Discussion in progress on wildfly-dev@lists.jboss.org
+** Looks like `srcdeps` will be allowed in pull requests but will not be allowed to be merged to stable
+   branches, such as master
+   -> a partial productivity win for the submitter
+
+
+== `srcdeps` project status
+
+* All code and contributions are under Apache License v2
+* Documentation: https://github.com/srcdeps/srcdeps/blob/master/README.adoc
+* Quickstarts: https://github.com/srcdeps/srcdeps/tree/master/srcdeps-maven-quickstarts
+* Issues and discussions: https://github.com/srcdeps/srcdeps-maven/issues
+* link:https://twitter.com/ppalaga[]
+
+Contributions welcome!
+
+
+== Things to remember about `srcdeps`
+
+* Eliminates the idle time when waiting to a release of a dependency
+* Shortens the integration/delivery cycles in complex dependency hierarchies
+* May eliminate the need for a shared Maven repository
+* Gives power to the consuming project because no action or consent from the dependency project required
+
+== {nbsp}
+
+Thanks!

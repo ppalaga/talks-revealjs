@@ -195,7 +195,9 @@ Dependency project doing nasty things
 
 == `srcdeps`
 
-The source dependencies for Maven and Gradle
+* Maven implementation since ~October 2015, now robust and stable
+* General parts moved to `srcdeps-core` in 2016 to be able to add support for other build tools
+* Gradle PoC recently
 
 
 === How `srcdeps` work (1/3)
@@ -234,13 +236,14 @@ When an artifact with `*-SRC-revision-{commitId}` version is found
 * Find a git URL for it
 * Checkout the source to `~/.m2/srcdeps` directory
 * Change the versions in the `pom.xml`/`build.gradle` files to whatever `*-SRC-revision-{commitId}` was requested
-* Build and install locally
+* Build the dependency and install the resulting artifacts locally
+* The primary build then takes the artifacts from the Maven Local Repository
 
 
 == Demo: `srcdeps` with Maven
 
 
-link:#_miscellaneous_code_srcdeps_code_features[Skip things shown in demo]
+link:#/_code_srcdeps_code_features[Skip things shown in demo]
 
 
 === Let's have a simple project
@@ -362,7 +365,7 @@ repositories:
 ----
 
 
-== Build the dependent project
+=== Build the dependent project
 
 [source,shell]
 ----
@@ -396,11 +399,9 @@ Q.E.D.
 * The source dependency was installed in the local Maven repo, typically `~/.m2/repository
 
 
-== Gradle support
+== Demo: `srcdeps` with Gradle
 
-* Proof of Concept stage
-
-
+* Gradle support PoC only
 
 
 == `srcdeps` features
@@ -412,7 +413,7 @@ Q.E.D.
 +
 {nbsp}
 +
-* Source dependencies work for vitually any kind of a dependency incl. parent, managed imports and even plugins
+* In Maven, source dependencies work for vitually any kind of a dependency incl. parent, managed imports and even plugins
 
 == `srcdeps.yaml` config. options
 
@@ -423,7 +424,8 @@ Q.E.D.
 * By default `failWith: {goals: release:prepare}` to prevent releases with source dependencies
 * See https://github.com/srcdeps/srcdeps-core/blob/master/doc/srcdeps.yaml
 
-== Limitations
+
+== Limitations (1/2)
 
 Can you think of any?
 
@@ -432,6 +434,11 @@ Can you think of any?
 * Only Maven and git supported well ATM, Gradle on the way
 * However immutable git commits are, they can still disappear from repos, or even the whole repo can be deleted
 ** Best practice: use `srcdeps` only against your own repos or your own mirrors of third party repos
+
+
+== Limitations (2/2)
+
+[options="step"]
 * There is still a few things that may differ among devs: java version, mvn version
 ** Projects should use `mvnw` with a fixed mvn version
 ** Enforcer plugin for Java version
@@ -440,21 +447,7 @@ Can you think of any?
 ** Where would this matter actually?
 
 
-== History of `srcdeps`
-
-* Created around October 2015 during my time in Hawkular link:https://github.com/hawkular/[]
-** A greenfield project with several components
-** To speedup the integration of components
-** Positive feedback, still in use
-
-* Pull request to introduce `srcdeps` to WildFly Core open this week
-** Discussion in progress on wildfly-dev@lists.jboss.org
-** Looks like `srcdeps` will be allowed in pull requests but will not be allowed to be merged to stable
-   branches, such as master
-   -> a partial productivity win for the submitter
-
-
-== `srcdeps` project status
+== `srcdeps` project links
 
 * All code and contributions are under Apache License v2
 * Documentation: https://github.com/srcdeps/srcdeps/blob/master/README.adoc
@@ -464,13 +457,6 @@ Can you think of any?
 
 Contributions welcome!
 
-
-== Things to remember about `srcdeps`
-
-* Eliminates the idle time when waiting to a release of a dependency
-* Shortens the integration/delivery cycles in complex dependency hierarchies
-* May eliminate the need for a shared Maven repository
-* Gives power to the consuming project because no action or consent from the dependency project required
 
 == {nbsp}
 

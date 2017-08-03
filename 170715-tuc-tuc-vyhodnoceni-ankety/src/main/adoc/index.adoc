@@ -1,0 +1,103 @@
+= Vyhodnocení ankety
+
+:revealjs_controls: true
+:revealjs_history: true
+:hash: #
+:example-caption!:
+ifndef::imagesdir[:imagesdir: images]
+
+Noční tuc-tuc v Žeravicích 15.7.2017
+
+{nbsp}
+
+Peter Paľaga
+
+
+== O anketě
+
+* V noci ze soboty 15.7.2017 na neděli 16.7.2017 pořádala mládež akci s hudební produkcí (zkráceně tuc-tuc) pod holým nebem za sokolovnou
+* Cílem ankety bylo zjistit postoj obyvatel k této a podobným akcím
+* Anketa byla otevřená od 16.7. do 25.7.2017
+* Otázky:
+** Postoj k tuc-tuc akci: účastnil(a) jsem se, nevadila, vadila, byl(a) jsem mimo Žeravic
+** Místo výskytu hlasujícího: na akci vs. jednotlivé části Žeravic
+** Věk
+** Pohlaví
+
+
+== Počet hlasů
+
+[.text-left]
+* V anketě hlasovalo *65* lidí
+
+[.text-left]
+Pro zajímavost a porovnání:
+
+[.text-left]
+* Stránku ankety navštívilo celkem 210 jednotlivců, což je mnohem víc než těch 65, kteří také hlasovali
+* FB skupina Žeravice má 343 členů
+* Počet obyvatel Žeravic: 1027 (k 31.12.2016, podle link:https://www.czso.cz/csu/czso/databaze-demografickych-udaju-za-obce-cr[dat ČSU])
+* Máme hlasy od cca. 6,5% obyvatel
+
+
+== Anonymní hlasy
+
+* Původně jsem avizoval, že anonymní hlasy a hlasy ze zjevně falešných profilů nebudu počítat
+* Nakonec jsem se rozhodl, že je započítám, protože
+** V anonymních hlasech nebyl patrný žádný pokus o podvod (mnoho hlasů z jedné IP adresy a pod.)
+** Podezření na falešný profil jsem měl jen v jednom případě (fotka mladé slečny z fotobanky neseděla k věku 61-70 v anketě, k tomu timeline složená výhradně z reklamy)
+* Započteny jsou všechny hlasy, jmenovaný fake profil jsem ručně přesunul do skupiny 19-30
+
+
+== Věkové složení (1/2)
+
+image::vek-slozeni.png[]
+
+* Graf srovnává věkové složení účastníků akety s věkovým složením obyvatel okresu Hodonín (podle link:https://www.czso.cz/csu/czso/vekove-slozeni-obyvatelstva-2016[dat ČSU] k 1.1.2016)
+* Věkové složení Žeravic jsem bohužel nenašel
+
+
+== Věkové složení (2/2)
+
+image::vek-slozeni.png[]
+
+* V anketě jsou početněji zastoupeny mladší skupiny na úkor starších
+* Ve skupině 51-60 jsou jenom 3 hlasy, ve skupině 61-70 je 1 hlas a ve skupině nad 71 let nejsou vůbec žádné hlasy
+* Anketa dostatečně mapuje postoje lidí do 50 let
+* O postojích lidí od 51 let (zhruba 43% obyvatel obce) neříká anketa téměř nic
+
+
+== Složení podle pohlaví
+
+Nic neobvyklého, jen pro zajímavost
+
+image::gender-dist.png[]
+
+
+== Postoj k hluku (1/2)
+
+image::postoj-k-hluku.png[]
+
+* Z věkových skupin, které se ankety zúčastnily, hluk z akce nevadil drtivé většině hlasujících
+* Odpůrci nicméně existují
+
+
+== Postoj k hluku (2/2)
+
+image::postoj-k-hluku-vazeny.png[]
+
+* Zohlednění chybějících dat
+* Hlasy jsou váženy podle podílu dané věkové skupiny na celkovém počtu obyvatel okresu Hodonín, pokud v dané skupině máme 10 a víc hlasů
+
+
+== Místo
+
+image::misto.png[]
+
+* Jen pro zajímavost
+* Rozklad *vadí-nevadí* podle místa nemá smysl, protože hlasů *vadí* je příliš málo
+
+== {nbsp}
+
+Děkuji za pozornost a ochotu vyjádřit se :)
+

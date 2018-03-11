@@ -15,5 +15,6 @@
     <module>170508-jug-vienna</module>
     <module>170715-tuc-tuc-vyhodnoceni-ankety</module>
     <module>171020-geecon-prague</module>
+    <module>180200-jenkins-pipeline</module>
   </modules>
 </project>

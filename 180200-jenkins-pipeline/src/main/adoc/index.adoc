@@ -1,0 +1,263 @@
+= Jenkins Pipeline
+
+:revealjs_controls: false
+:revealjs_history: true
+:hash: #
+:example-caption!:
+ifndef::imagesdir[:imagesdir: images]
+ifndef::sourcedir[:sourcedir: ../../main/java]
+
+alias Jenkinsfile
+
+{nbsp}
+
+Peter Palaga
+
+== What is Jenkins Pipeline
+
+* Suite of plugins to support continuous delivery pipelines on Jenkins 2.x
+* Pipelines "as code"
+** Jenkinsfile
+** Groovy based DSL
+
+
+== A basic Jenkinsfile
+
+[source,groovy]
+----
+node {
+    stage('Hello Stage') {
+        echo 'Hello world!'
+    }
+}
+----
+
+
+== The simplest way to try out?
+
+[source,shell]
+----
+oc login ...
+oc new-project jenkinsfile-demo
+oc new-app https://github.com/ppalaga/jenkinsfile-demo.git
+----
+
+
+== Support on OpenShift
+
+If the app git repo contains a Jenkinsfile, OpenShift
+
+* Creates a `BuildConfig` with a special ‘Pipeline’ strategy
+* Triggers the first build on an auto-provisioned Jenkins instance
+
+
+== Declarative vs. scripted Pipeline
+
+[source,groovy]
+----
+node {          /* Older, "scripted" syntax */
+                /* currently prefered on OpenShift */
+    stage('Hello Stage') {
+        echo 'Hello world!'
+    }
+}
+
+pipeline {       /* Newer, "declarative" syntax */
+    agent any    /* since Jenkins Pipeline plugin */
+    stages {     /* v2.5 rel on Feb 01, 2017 */
+        stage('Hello Stage') {
+            steps {
+                echo 'Hello world!'
+            }
+        }
+    }
+}
+----
+
+
+== Maven scripted
+
+[source,groovy]
+----
+node('maven') {
+    stage('Hello Stage') {
+        echo 'Hello world!'
+        sh 'mvn -version'
+    }
+}
+----
+
+
+== Maven declarative
+
+[source,groovy]
+----
+pipeline {
+  agent {
+      label 'maven'
+  }
+  stages {
+    stage('Build App') {
+      steps {
+        sh 'mvn -version'
+      }
+    }
+  }
+}
+----
+
+
+== OpenShift Jenkins Client Plugin (1/2)
+
+Adds DSL to manage OpenShift Clusters, present by default in Os Jenkins Image
+
+[source,groovy]
+----
+openshift.withCluster( 'https://10.13.137.207:8443', 'CO8wPaLV2M2yC_jrm00hCmaz5Jgw...' ) {
+    openshift.withProject( 'myproject' ) {
+        echo "Hello from project ${openshift.project()} in cluster ${openshift.cluster()}"
+    }
+}
+----
+
+== OpenShift Jenkins Client Plugin (2/2)
+
+[source,groovy]
+----
+openshift.withCluster( 'mycluster' ) {
+    def bc = openshift.newApp( 'https://github.com/openshift/ruby-hello-world' ).narrow('bc')
+    def builds = bc.related('builds')
+    timeout(10) {
+        builds.watch {
+            // Within the body, the variable 'it' is bound to the watched Selector (i.e. builds)
+            echo "So far, ${bc.name()} has created builds: ${it.names()}"
+            // End the watch only once a build object has been created.
+            return it.count() > 0
+        }
+    }
+}
+----
+
+
+== `oc` in Jenkinsfile
+
+[source,groovy]
+----
+pipeline {
+  agent {
+      label 'maven'
+  }
+  stages {
+      stage('oc') {
+          steps {
+              sh 'oc get all'
+          }
+      }
+  }
+}
+----
+
+
+== Interactive input
+
+[source,groovy]
+----
+node('maven') {
+    stage('Build') {
+        echo 'Building...'
+    }
+    stage('Test') {
+        echo 'Testing...'
+    }
+}
+stage ('Promote') {
+    input 'Deploy to Production?'
+}
+node('maven') {
+    stage('Deploy') {
+        echo 'Deploying...'
+    }
+}
+----
+
+== Interactive input with timeout
+
+[source,groovy]
+----
+node('maven') {
+    stage('Build') {
+        echo 'Building...'
+    }
+    stage('Test') {
+        echo 'Testing...'
+    }
+}
+stage ('Promote') {
+    timeout(time: 5, unit: 'SECONDS') {
+        input 'Deploy to Production?'
+    }
+}
+node('maven') {
+    stage('Deploy') {
+        echo 'Deploying...'
+    }
+}
+----
+
+
+== Parall el
+
+[source,groovy]
+----
+parallel (
+    a : {
+        node('maven') {
+            stage('Test Linux') {
+                echo 'Building...'
+            }
+        }
+    },
+    b : {
+        node('maven') {
+            stage('Test Windows') {
+                echo 'Building...'
+            }
+        }
+    }
+)
+----
+
+
+== Shared Libraries
+
+[source,groovy]
+----
+/* Load a lib from GitHub */
+@Library('github.com/fabric8io/fabric8-pipeline-library@master')
+...
+----
+
+[source,groovy]
+----
+/* Load a lib from Maven Central */
+@Grab('org.apache.commons:commons-math3:3.4.1')
+import org.apache.commons.math3.primes.Primes
+...
+----
+
+
+== Real scenario
+
+https://github.com/OpenShiftDemos/openshift-cd-demo
+
+image::pipeline.png[]
+
+
+== Docs
+
+https://jenkins.io/doc/book/pipeline/getting-started/
+
+
+== {nbsp}
+
+Thanks!

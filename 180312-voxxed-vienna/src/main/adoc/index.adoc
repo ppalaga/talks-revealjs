@@ -1,0 +1,387 @@
+= Blue-green Deployments and Canary Releases on Kubernetes
+
+:revealjs_controls: false
+:revealjs_history: true
+:hash: #
+:example-caption!:
+ifndef::imagesdir[:imagesdir: images]
+ifndef::sourcedir[:sourcedir: ../../main/java]
+
+{nbsp}
+
+Peter Palaga · Marek Jelen
+
+
+== {nbsp}
+
+|===
+|https://twitter.com/ppalaga[Peter] |https://twitter.com/marek_jelen[Marek]
+
+|"Java guy"
+
+JBoss Fuse, JBoss EAP
+
+|"Kubernetes & OpenShift guy"
+
+Developer Advocate
+
+|===
+
+
+== Agenda
+
+* A Spring Boot app
+* Bring it to the cloud
+* Deployment strategies
+
+
+== A Spring Boot app
+
+https://github.com/ppalaga/horse-ride-service
+
+* Model with a few Entities
+* CRUD endpoints provided by Spring Data
+* Usual `@SpringBootTest`
+
+
+[NOTE.speaker]
+--
+* Horse rides scheduling - Diesel engines forbidden soon, think of Uber for horses, Austrian ministry of Internal Affairs,
+* Usual Maven setup
+* Model with a couple of Entities
+* CRUD endpoints provided by Spring Data
+* One hand crafted endpoint for ride scheduling
+* Usual @SpringBootTest
+* So far developed only locally against a manually provisioned PostgreSQL database
+* A static index.html page we'll use to demo some things
+* Nothing fancy here, it's all just stock Spring Boot code
+
+PP:
+* The customer wants us not only to build the app, but also to run it
+* The choice of platform and tools is up to us
+* We want a process not only to build and test our app but also to deploy it in a controlled and predictable way
+* We want to be able to do all those fancy things like Blue-green Deployments, Canary Releases and A/B Testing
+
+MJ:
+* Containers? Yes, because we like how the solve packaging incl. OS, configuration and provisioning
+* Kubernetes standard these days, lets have a look at it
+* Plain Kubernetes?
+* Why OpenShift?
+** ...
+
+--
+
+== Minishift/Minikube
+
+* Single node Kubernetes/OpenShift cluster
+* In a VM (hypervisor required)
+* Download and unzip from https://github.com/minishift/minishift/releases
+* Add `minishift` binary to `PATH`
+
+
+=== First steps with Minishift
+
+[source,shell,subs="quotes"]
+----
+*# You may need more or less CPU and memory*
+*# depending on what you do*
+minishift start --memory=8GB --cpus=4 --disk-size=50GB
+
+oc login -u developer -p whatever
+
+*# Open the OpenShift web console in browser*
+minishift console
+----
+
+[NOTE.speaker]
+--
+PP:
+* The jungle of Kube objects looks pretty scary
+* I'd expect to have to handcraft huge templates to construct the pipeline somehow...
+
+MJ:
+* Not necessarily, depends on how much you want your pipeline to get polished
+* Do you like Jenkins?
+PP: Of course
+MJ: Jenkins pipeline
+PP: Groovy based DSL? - of course!
+MJ: So just add a basic Jenkinsfile to your project and let's see what happens
+PP: I happen to have a Jenkinsfile there already
+MJ: What's in there?
+PP: It is pretty minimal. It just issues the usual Maven build
+MJ: It is skipping tests?
+PP: Er... yes, because I did not know how to provision a database
+PP: BTW, who of you is using Jenkinsfiles?
+--
+
+
+== Jenkins Pipeline on OpenShift
+
+[source,shell,subs="quotes"]
+----
+*# make sure you are in the default project*
+*$* oc project
+myproject
+*$* oc new-app https://github.com/ppalaga/horse-ride-service.git
+----
+
+* If the git repo contains a Jenkinsfile
+** Os creates a `BuildConfig` with a special `Pipeline` strategy
+** Provisions a Jenkins instance
+** Triggers the first build
+
+[NOTE.speaker]
+--
+PP: What? OpenShift provisions a Jenkins instance for me?
+MJ: Yes, that's one of those small diffs against plain Kube I mentioned earlier
+
+oc delete project ride
+--
+
+
+== Preparations for a real pipeline
+
+* Git repo inside the cluster
+* Separate projects for CI, stage and production
+* Some permissions for Jenkins
+* Done by `provision.sh` script:
+
+[source,shell]
+----
+git clone https://github.com/ppalaga/horse-ride-service.git
+cd horse-ride-service
+git reset --hard provision.sh
+oc login -u developer -p whatever
+cd src/main/openshift; ./provision.sh
+----
+
+
+[NOTE.speaker]
+--
+MJ: private repo practical if you do not want to pay for private GitHub repos
+* Also practical for us when on a flaky conf. WiFi
+* Also important if your Kube/Os cluster is not accessible from the internet
+PP: Yes, Github hooks would not work...
+
+* The last step calls  oc new-app with the internal git url
+
+--
+
+
+== Pipeline
+
+=== Build and test
+
+Provision a database so that the `@SpringBootTest` can pass
+
+[source,shell,subs="quotes"]
+----
+cd horse-ride-service; git checkout master
+git reset --hard testdb
+git diff HEAD^ HEAD *# study what changed*
+*# Alias the cluster's internal git repo*
+URL=http://team:team@gogs-horse-ride-cicd.$(minishift ip).nip.io
+git remote add minishift ${URL}/team/horse-ride-service.git
+*# Push to the cluster's internal git repo*
+git push -f minishift master
+*# Go to horse-ride-cicd project in OpenShift console*
+*# and check that the pipeline started under Builds > Pipelines*
+----
+
+
+[NOTE.speaker]
+--
+PP: in baseline, the tests were skipped
+* Here, a database container is provisioned before running the mvn build
+* What is this "openshift" object?
+MJ: OpenShift Client Jenkins plugin
+* It is available in the Os Jenkins image by default
+PP: How about auth?
+MJ: The client acts as user "jenkins"
+PP: What can it do?
+MJ: Most of usual things in the current project
+* but if you want to do something in a project distict from the project where the Jenkinsfile is defined,
+you have to grant some permissions to Jenkins manually
+* That's what we have done in provision.sh script
+PP: env vars to pass the database info
+PP: what if I do not want expose the password in the Jenkinsfile?
+MJ: ...
+--
+
+=== Build and test Docker image
+
+[source,shell,subs="quotes"]
+----
+git reset --hard test-image
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Look at horse-ride-cicd > Builds > Pipelines*
+*# Open the Jenkins log*
+----
+
+
+[NOTE.speaker]
+--
+Jenkinsfile:
+
+* A new stage
+PP: What is fabric8:build
+MJ: A mvn plugin for building Docker images
+PP: so I do not have to issue play with the docker command?
+MJ: no, and it would be rather complicated inside the cluster
+PP: Why?
+MJ: Because the cluster does not expose the docker daemon to everyone
+PP: Hm... how are non-maven projects built then?
+MJ: s2i ... and actually, the fabric8 plugin runs an s2i build under the hood
+PP: interesting
+PP: How do I tell the plugin what I want it to do?
+MJ: look into pom.xml
+PP: What is <name>%g/%a:test</name> ?
+MJ: name and tag to push to cluster-internal docker repo
+PP: So there is a docker repo in the cluster?
+* That's nice that I do not have to set it up myself
+PP: <assembly> ?
+MJ: That specifies what gets into the image. Just open the assembly.xml
+PP: I like that this is using technologies I actaully know already
+MJ: back to Jenkinsfile
+* Create a new app, but this time not out of a git repo, but out of the image tag we have just pushed using fabric8 plugin
+PP: I see
+
+PP: probe?
+MJ: ...
+PP: OK, it invokes the the /health endpoint provided by Spring Actuator
+--
+
+=== Stage -> approval -> production
+
+[source,shell,subs="quotes"]
+----
+git reset --hard stage-prod
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Look at horse-ride-cicd > Builds > Pipelines*
+*# Visit the stage and prod sites via links in Jenkins log*
+*# Approve the promotion from stage to production*
+----
+
+[NOTE.speaker]
+--
+* Two new stages
+* Provision a database
+* Tag
+* Wait for rollout
+* Check the link, Approve
+* The same in prod: tag, rollout, link
+
+PP: That's straightforward: approve -> production
+* But let's say I want to have a safe way back
+--
+
+== Blue/green deployments
+
+image::blue-green.svg[]
+
+* Release in a predictable manner
+* Reduce downtime
+** Easy to switch to roll out a new version
+** Easy to roll back if the new version does not behave properly
+
+https://martinfowler.com/bliki/BlueGreenDeployment.html
+
+[NOTE.speaker]
+--
+* In Kube/Os:
+** One route, two services (and deployments)
+** The route switches based on spec.to.name: blue|green
+--
+
+
+=== Blue/green demo (1/2)
+
+[source,shell,subs="quotes"]
+----
+git reset --hard blue-green
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Look at horse-ride-cicd > Builds > Pipelines*
+*# The UI of new deployment should be blue*
+----
+
+
+=== Blue/green demo (2/2)
+
+[source,shell,subs="quotes"]
+----
+git reset --hard blue-green-green-bg
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Look at horse-ride-cicd > Builds > Pipelines*
+*# The UI of new deployment should be green
+----
+
+
+=== Blue/green Caveats
+
+* Long running sessions/connections need to be handled gracefully.
+* Database schema conversions
+** Ideally back/forwards compatible - see Edson's book http://www.oreilly.com/programming/free/migrating-to-microservice-databases.csp
+** Downtime may be needed in some cases
+
+
+== Canary releases
+
+image::canary.svg[]
+
+* Roll out gradually
+* Observe canary's health
+* Rollback if the canary dies
+
+https://martinfowler.com/bliki/CanaryRelease.html
+
+[NOTE.speaker]
+--
+* Deployment strategy actually selectable for a DeploymentConfig
+** "Rolling" strategy is the default
+*** provides a minimal canary
+*** If readiness never succeeds, the new image is not rolled out
+    and the deployment actually fails after a few retries.
+
+Is this enough? - No
+
+** "Recreate" - old code and new code do not run at once, but incurs downtime, supports pre, mid, post hooks to trigger any necessary migration steps
+** "Custom" - provide your own image that is run to perform the migration
+--
+
+=== Canary demo (1/2)
+
+[source,shell,subs="quotes"]
+----
+git reset --hard canary
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Observe the iterative checking of canary's health in Jenkins log*
+*# This canary survives and its UI background is yellow*
+----
+
+
+=== Canary demo (2/2)
+
+[source,shell,subs="quotes"]
+----
+git reset --hard canary-dead
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Observe the iterative checking of canary's health in Jenkins log*
+*# This canary dies and its gray UI won't be served after*
+*# the rollback*
+----
+
+
+
+== Wrap up
+
+[%step]
+* `https://kubernetes.io/docs/tasks/tools/install-minikube/[minikube]`/`https://docs.openshift.org/latest/minishift/getting-started/installing.html[minishift]` to start experimenting
+* Jenkins Pipeline a first class citizen on OpenShift
+* `https://jenkins.io/doc/book/pipeline/[Jenkinsfile]` powerful enough to script your deployment strategy
+* Source of this demo: https://github.com/ppalaga/horse-ride-service

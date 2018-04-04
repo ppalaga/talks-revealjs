@@ -18,5 +18,6 @@
     <module>180200-jenkins-pipeline</module>
     <module>180312-voxxed-vienna</module>
     <module>180322-voxxed-bucharest</module>
+    <module>180411-red-hat-open-house-brno</module>
   </modules>
 </project>

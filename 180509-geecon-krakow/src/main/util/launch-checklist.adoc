@@ -1,0 +1,6 @@
+
+== Scratch Eclipse
+
+* Open
+* Build the EE app to have the WAR
+

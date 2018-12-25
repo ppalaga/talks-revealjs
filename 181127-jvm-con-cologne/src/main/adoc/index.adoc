@@ -1,0 +1,252 @@
+= Blue-green Deployments and Canary Releases on Kubernetes
+
+:revealjs_controls: false
+:revealjs_history: true
+:hash: #
+:example-caption!:
+ifndef::imagesdir[:imagesdir: images]
+ifndef::sourcedir[:sourcedir: ../../main/java]
+
+
+[cols=">,<", options="header"]
+|===
+|{nbsp}|{nbsp}
+
+|Peter Palaga{nbsp}{nbsp}{nbsp}{nbsp}
+
+https://twitter.com/ppalaga[@ppalaga]{nbsp}{nbsp}{nbsp}{nbsp}{nbsp}{nbsp}{nbsp}
+
+|{nbsp}{nbsp}{nbsp}{nbsp}{nbsp}{nbsp}Marek Jelen
+
+{nbsp}{nbsp}{nbsp}{nbsp}https://twitter.com/marek_jelen[@marek_jelen]
+
+|===
+
+
+== {nbsp}
+
+[id="slide1"]
+|===
+|https://twitter.com/ppalaga[Peter Palaga] |https://twitter.com/marek_jelen[Marek Jelen]
+
+|"Java guy"
+
+Red Hat Fuse, JBoss EAP
+
+|"Kubernetes & OpenShift guy"
+
+Developer Advocate
+
+|===
+
+
+== Agenda
+
+* A Spring Boot app
+* Bring it to the cloud
+* Deployment{nbsp}strategies
+
+
+== A Spring Boot app
+
+https://github.com/ppalaga/horse-ride-service
+
+* Model with a few Entities
+* CRUD endpoints provided by Spring Data
+* Usual `@SpringBootTest`
+
+
+== Minishift/Minikube
+
+* Single node Kubernetes/OpenShift cluster
+* In a VM (hypervisor required)
+* Download and unzip from https://github.com/minishift/minishift/releases
+* Add `minishift` binary to `PATH`
+
+
+=== First steps with Minishift
+
+[source,shell,subs="quotes"]
+----
+*# You may need more or less CPU and memory*
+*# depending on what you do*
+minishift start --memory=8GB --cpus=4 --disk-size=50GB
+
+oc login -u developer -p whatever
+
+*# Open the OpenShift web console in browser*
+minishift console
+----
+
+
+== Jenkins Pipeline on OpenShift
+
+[source,shell,subs="quotes"]
+----
+*# make sure you are in the default project*
+*$* oc project
+myproject
+*$* oc new-app https://github.com/ppalaga/horse-ride-service.git
+----
+
+* If the git repo contains a Jenkinsfile
+** Os creates a `BuildConfig` with a special `Pipeline` strategy
+** Provisions a Jenkins instance
+** Triggers the first build
+
+
+== Preparations for a real pipeline
+
+* Git repo inside the cluster
+* Separate projects for CI, stage and production
+* Some permissions for Jenkins
+* Done by `provision.sh` script:
+
+[source,shell]
+----
+git clone https://github.com/ppalaga/horse-ride-service.git
+cd horse-ride-service
+git reset --hard provision.sh
+oc login -u developer -p whatever
+cd src/main/openshift; ./provision.sh
+----
+
+
+== Pipeline
+
+=== Build and test
+
+Provision a database so that the `@SpringBootTest` can pass
+
+[source,shell,subs="quotes"]
+----
+cd horse-ride-service; git checkout master
+git reset --hard testdb
+git diff HEAD^ HEAD *# study what changed*
+*# Alias the cluster's internal git repo*
+URL=http://team:team@gogs-horse-ride-cicd.$(minishift ip).nip.io
+git remote add minishift ${URL}/team/horse-ride-service.git
+*# Push to the cluster's internal git repo*
+git push -f minishift master
+*# Go to horse-ride-cicd project in OpenShift console*
+*# and check that the pipeline started under Builds > Pipelines*
+----
+
+
+=== Build and test Docker image
+
+[source,shell,subs="quotes"]
+----
+git reset --hard test-image
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Look at horse-ride-cicd > Builds > Pipelines*
+*# Open the Jenkins log*
+----
+
+
+=== Stage -> approval -> production
+
+[source,shell,subs="quotes"]
+----
+git reset --hard stage-prod
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Look at horse-ride-cicd > Builds > Pipelines*
+*# Visit the stage and prod sites via links in Jenkins log*
+*# Approve the promotion from stage to production*
+----
+
+
+== Blue/green deployments
+
+image::blue-green.svg[]
+
+* Release in a predictable manner
+* Reduce downtime
+** Easy to switch to roll out a new version
+** Easy to roll back if the new version does not behave properly
+
+https://martinfowler.com/bliki/BlueGreenDeployment.html
+
+
+=== Blue/green demo (1/2)
+
+[source,shell,subs="quotes"]
+----
+git reset --hard blue-green
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Look at horse-ride-cicd > Builds > Pipelines*
+*# The UI of new deployment should be blue*
+----
+
+
+=== Blue/green demo (2/2)
+
+[source,shell,subs="quotes"]
+----
+git reset --hard blue-green-green-bg
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Look at horse-ride-cicd > Builds > Pipelines*
+*# The UI of new deployment should be green
+----
+
+
+=== Blue/green Caveats
+
+* Long running sessions/connections need to be handled gracefully.
++
+[link=http://www.oreilly.com/programming/free/migrating-to-microservice-databases.csp]
+image::migrating-to-microservice-databases.gif["Migrating to Microservice Databases",role=right]
++
+* Database schema conversions
+** Ideally back/forwards compatible - see Edson Yanagas's book
+** Downtime may be needed in some cases
+
+
+== Canary releases
+
+image::canary.svg[]
+
+* Roll out gradually
+* Observe canary's health
+* Rollback if the canary dies
+
+https://martinfowler.com/bliki/CanaryRelease.html
+
+
+=== Canary demo (1/2)
+
+[source,shell,subs="quotes"]
+----
+git reset --hard canary
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Observe the iterative checking of canary's health in Jenkins log*
+*# This canary survives and its UI background is yellow*
+----
+
+
+=== Canary demo (2/2)
+
+[source,shell,subs="quotes"]
+----
+git reset --hard canary-dead
+git diff HEAD^ HEAD *# study what changed*
+git push -f minishift master
+*# Observe the iterative checking of canary's health in Jenkins log*
+*# This canary dies and its gray UI won't be served after*
+*# the rollback*
+----
+
+
+
+== Wrap up
+
+[%step]
+* `https://kubernetes.io/docs/tasks/tools/install-minikube/[minikube]`/`https://docs.openshift.org/latest/minishift/getting-started/installing.html[minishift]` to start experimenting
+* Jenkins Pipeline a first class citizen on OpenShift
+* `https://jenkins.io/doc/book/pipeline/[Jenkinsfile]` powerful enough to script your deployment strategy
+* Source of this demo: https://github.com/ppalaga/horse-ride-service
